@@ -1,4 +1,8 @@
 # Rep.ResearchProject2
+The following information came from the Coursera Data Science Class through Johns Hopkins University
+Week 4 Project 2 of Reproducible Research
+
+
 Introduction
 
 Storms and other severe weather events can cause both public health and economic problems for communities and municipalities. Many severe events can result in fatalities, injuries, and property damage, and preventing such outcomes to the extent possible is a key concern.
