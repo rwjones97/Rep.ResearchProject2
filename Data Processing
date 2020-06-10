@@ -1,0 +1,226 @@
+##Reproducible Research Project 2 NOAA Storm Data Analysis
+##Week 4 Assignment
+##Author.Rwjones97
+##June 8, 2020
+
+##The basic goal of this assignment is to explore the NOAA Storm Database create graphs over certain severe weather events. From tornadoes, hail, drought, etc. these weather events cause devestation to many people throughout the United States. What is listed below is a full report of the anaylsis I did using RStudio. 
+
+##The data for this assignment come in the form of a comma-separated-value file compressed via the bzip2 algorithm to reduce its size. You can download the file from the course web site: https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip
+
+## PART I 
+```{r}
+
+library("data.table")
+library("ggplot2")
+
+fileUrl <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+
+download.file(fileUrl, destfile = paste0("/Users/jonesr/Desktop", '/repdata%2Fdata%2FStormData.csv.bz2'))
+stormDF <- read.csv("/Users/jonesr/Desktop/repdata%2Fdata%2FStormData.csv.bz2")
+```
+
+
+## Next convert from data.frame to data.table
+```{r}
+stormDT <- as.data.table(stormDF)
+```
+
+## Then examine and set column names
+```{r}
+
+colnames(stormDT)
+```
+
+
+## Part II
+
+## Subset the dataset on the parameters of interest by removing the columns we don't need. Focus only on the columns needed for this research. 
+```{r}
+
+cols2Remove <- colnames(stormDT[, !c("EVTYPE"
+                                     , "FATALITIES"
+                                     , "INJURIES"
+                                     , "PROPDMG"
+                                     , "PROPDMGEXP"
+                                     , "CROPDMG"
+                                     , "CROPDMGEXP")])
+```
+
+
+## Removing columns
+```{r}
+stormDT[, c(cols2Remove) := NULL]
+```
+
+## Use primary data where fatalities or injuries occurred. 
+```{r}
+
+stormDT <- stormDT[(EVTYPE != "?" & 
+                      (INJURIES > 0 | FATALITIES > 0 | PROPDMG > 0 | CROPDMG > 0)), c("EVTYPE"
+                                                                                      , "FATALITIES"
+                                                                                      , "INJURIES"
+                                                                                      , "PROPDMG"
+                                                                                      , "PROPDMGEXP"
+                                                                                      , "CROPDMG"
+                                                                                      , "CROPDMGEXP") ]
+
+```
+
+## Part III
+
+## Converting Exponent Columns into Actual Exponents 
+
+# Change all damage exponents to uppercase for a cleaner look.
+```{r}
+cols <- c("PROPDMGEXP", "CROPDMGEXP")
+stormDT[,  (cols) := c(lapply(.SD, toupper)), .SDcols = cols]
+
+```
+
+## Map property damage in alphanumeric exponents to numeric values.
+```{r}
+propDmgKey <-  c("\"\"" = 10^0,
+                 "-" = 10^0, 
+                 "+" = 10^0,
+                 "0" = 10^0,
+                 "1" = 10^1,
+                 "2" = 10^2,
+                 "3" = 10^3,
+                 "4" = 10^4,
+                 "5" = 10^5,
+                 "6" = 10^6,
+                 "7" = 10^7,
+                 "8" = 10^8,
+                 "9" = 10^9,
+                 "H" = 10^2,
+                 "K" = 10^3,
+                 "M" = 10^6,
+                 "B" = 10^9)
+```
+
+
+
+
+## Map crop damage alphanumeric exponents to numeric values
+```{r}
+cropDmgKey <-  c("\"\"" = 10^0,
+                 "?" = 10^0, 
+                 "0" = 10^0,
+                 "K" = 10^3,
+                 "M" = 10^6,
+                 "B" = 10^9)
+```
+
+
+```{r}
+
+stormDT[, PROPDMGEXP := propDmgKey[as.character(stormDT[,PROPDMGEXP])]]
+stormDT[is.na(PROPDMGEXP), PROPDMGEXP := 10^0 ]
+
+stormDT[, CROPDMGEXP := cropDmgKey[as.character(stormDT[,CROPDMGEXP])] ]
+stormDT[is.na(CROPDMGEXP), CROPDMGEXP := 10^0 ]
+```
+
+## Part IV
+
+## Making Economic Cost Columns
+```{r}
+stormDT <- stormDT[, .(EVTYPE, FATALITIES, INJURIES, PROPDMG, PROPDMGEXP, propCost = PROPDMG * PROPDMGEXP, CROPDMG, CROPDMGEXP, cropCost = CROPDMG * CROPDMGEXP)]
+
+```
+
+
+## Part V
+
+## Calcuating Total Property and Crop Cost
+```{r}
+totalCostDT <- stormDT[, .(propCost = sum(propCost), cropCost = sum(cropCost), Total_Cost = sum(propCost) + sum(cropCost)), by = .(EVTYPE)]
+
+totalCostDT <- totalCostDT[order(-Total_Cost), ]
+
+totalCostDT <- totalCostDT[1:10, ]
+
+head(totalCostDT, 5)
+```
+
+## Part VI
+
+## Calcuating Total Fatalities and Injuries
+
+```{r}
+totalInjuriesDT <- stormDT[, .(FATALITIES = sum(FATALITIES), INJURIES = sum(INJURIES), totals = sum(FATALITIES) + sum(INJURIES)), by = .(EVTYPE)]
+
+totalInjuriesDT <- totalInjuriesDT[order(-FATALITIES), ]
+
+totalInjuriesDT <- totalInjuriesDT[1:10, ]
+
+head(totalInjuriesDT, 5)
+```
+
+## Part VII
+
+## Results 1.0
+
+## Putting data.table together so that it is easier to put in bar graph format 
+```{r}
+bad_stuff <- melt(totalInjuriesDT, id.vars="EVTYPE", variable.name = "natural_diasters")
+head(bad_stuff, 5)
+```
+
+
+
+## Created chart 1. The following distributes the X and Y axis, 
+```{r}
+healthChart <- ggplot(bad_stuff, aes(x=reorder(EVTYPE, -value), y=value))
+
+
+healthChart = healthChart + geom_bar(stat="identity", aes(fill=natural_diasters), position="dodge")
+
+healthChart = healthChart + ylab("Frequency Count") 
+
+
+healthChart = healthChart + xlab("Event Type") 
+
+
+healthChart = healthChart + theme(axis.text.x = element_text(angle=45, hjust=1))
+
+
+healthChart = healthChart + ggtitle("Most Harmful") + theme(plot.title = element_text(hjust = 0.5))
+
+healthChart
+```
+
+
+
+## Results 2.0
+
+##  Events that have the Greatest Economic Consequences
+```{r}
+
+econ_consequences <- melt(totalCostDT, id.vars="EVTYPE", variable.name = "Damage_Type")
+head(econ_consequences, 5)
+
+
+econChart <- ggplot(econ_consequences, aes(x=reorder(EVTYPE, -value), y=value))
+
+
+econChart = econChart + geom_bar(stat="identity", aes(fill=Econ_damage), position="dodge")
+
+
+econChart = econChart + ylab("Cost (dollars)") 
+
+econChart = econChart + xlab("Event Type") 
+
+
+econChart = econChart + theme(axis.text.x = element_text(angle=45, hjust=1))
+
+
+econChart = econChart + ggtitle("Economic Consequences") + theme(plot.title = element_text(hjust = 0.5))
+
+econChart
+```
+
+
+## Final results will also be seperate files in Github.
+
+
